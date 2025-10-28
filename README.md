@@ -26,8 +26,11 @@ KB Web Searcher (combined dumps + individual KB files)
 
 Usage (Windows PowerShell example):
   cd D:\suse_kb_texts_Processed
+  
   python .\kb_searcher.py --index
+ 
   python .\kb_searcher.py --serve
+  
   # open http://127.0.0.1:8000
 
 Multiple roots:
