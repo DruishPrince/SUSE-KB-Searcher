@@ -30,6 +30,8 @@ Usage (Windows PowerShell example):
   python .\kb_searcher.py --index
  
   python .\kb_searcher.py --serve
+
+  Or run both at the same time python kb_searcher.py --index --serve
   
   # open http://127.0.0.1:8000
 
