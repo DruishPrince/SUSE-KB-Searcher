@@ -171,6 +171,71 @@ def rebuild_index(db_path: str, roots: List[str]) -> None:
                 print(f"[WARN] combined {path}: {e}", file=sys.stderr)
     con.close()
 
+def search_regex(con: sqlite3.Connection, pattern: str, file_filter: Optional[str], limit: int = 50, exact: bool = False):
+    r"""
+    Search articles using Python regex patterns.
+    Supports full regex syntax: .* (any chars), \d+ (digits), | (OR), etc.
+    If exact=True, escapes all special regex characters for exact matching.
+    """
+    # If exact mode, escape all regex special characters
+    if exact:
+        pattern = re.escape(pattern)
+
+    try:
+        # Compile the regex pattern (case-insensitive by default)
+        regex = re.compile(pattern, re.IGNORECASE)
+    except re.error as e:
+        # Invalid regex pattern
+        raise ValueError(f"Invalid regex pattern: {e}")
+
+    # Get all articles (or filtered by file)
+    if file_filter:
+        rows = con.execute(
+            "SELECT id, kb_id, title, source_file, content, is_individual FROM articles WHERE source_file LIKE ?",
+            (f"%{file_filter}%",)
+        ).fetchall()
+    else:
+        rows = con.execute(
+            "SELECT id, kb_id, title, source_file, content, is_individual FROM articles"
+        ).fetchall()
+
+    results = []
+    for row in rows:
+        # Search in both title and content
+        title_match = regex.search(row["title"])
+        content_match = regex.search(row["content"])
+
+        if title_match or content_match:
+            # Create a snippet showing the match context
+            if content_match:
+                # Get context around the match
+                start = max(0, content_match.start() - 100)
+                end = min(len(row["content"]), content_match.end() + 100)
+                snippet = row["content"][start:end]
+                # Highlight the match
+                snippet = regex.sub(r'<mark>\g<0></mark>', snippet)
+                if start > 0:
+                    snippet = "…" + snippet
+                if end < len(row["content"]):
+                    snippet = snippet + "…"
+            else:
+                # Match was in title, show beginning of content
+                snippet = row["content"][:200] + "…" if len(row["content"]) > 200 else row["content"]
+
+            results.append({
+                "id": row["id"],
+                "kb_id": row["kb_id"],
+                "title": row["title"],
+                "source_file": row["source_file"],
+                "is_individual": row["is_individual"],
+                "snippet": snippet
+            })
+
+            if len(results) >= limit:
+                break
+
+    return results
+
 def search(con: sqlite3.Connection, q: str, file_filter: Optional[str], limit: int = 50):
     where = "articles_fts MATCH ?"
     params = [q]
@@ -249,6 +314,16 @@ kbd{background:#f1f5f9;border:1px solid var(--border);border-bottom-width:2px;bo
     <div class="searchbar">
       <input id="q" type="text" placeholder="Search KB… (quotes for exact phrase)" />
     </div>
+    <div class="small" style="display:flex;gap:12px;align-items:center;margin-top:4px;">
+      <label style="display:flex;gap:4px;align-items:center;cursor:pointer;">
+        <input type="checkbox" id="regexMode" />
+        <span>Regex mode</span>
+      </label>
+      <label style="display:flex;gap:4px;align-items:center;cursor:pointer;">
+        <input type="checkbox" id="exactSearch" />
+        <span>Exact search</span>
+      </label>
+    </div>
     <div class="small">Tips: <kbd>Enter</kbd> to search • <kbd>↑/↓</kbd> navigate</div>
     <div id="results" class="results"></div>
   </div>
@@ -263,6 +338,8 @@ const qEl = document.getElementById('q');
 const resultsEl = document.getElementById('results');
 const viewer = document.getElementById('viewer');
 const reindexBtn = document.getElementById('reindexBtn');
+const regexModeEl = document.getElementById('regexMode');
+const exactSearchEl = document.getElementById('exactSearch');
 
 let selectedIndex = -1;
 let currentResults = [];
@@ -326,11 +403,22 @@ function openResult(i){
 
 function doSearch(){
   const q = qEl.value.trim();
+  const mode = regexModeEl.checked ? 'regex' : 'fts5';
+  const exact = exactSearchEl.checked ? 'true' : 'false';
+
   if(!q){ setStatus('Enter a search query.'); return; }
   setStatus('Searching…');
-  fetch(`/api/search?q=${encodeURIComponent(q)}`)
+
+  const url = `/api/search?q=${encodeURIComponent(q)}&mode=${mode}&exact=${exact}`;
+
+  fetch(url)
     .then(r=>r.json())
     .then(data=>{
+      if(data.error){
+        setStatus(`Error: ${data.error}`);
+        renderResults([]);
+        return;
+      }
       renderResults(data.results);
       if(data.results && data.results.length){ openResult(0); }
       else { setStatus('No results.'); }
@@ -398,21 +486,45 @@ def create_app(db_path: str, roots: List[str]):
     def api_search():
         q = request.args.get("q","").strip()
         file_f = request.args.get("file","").strip() or None
+        mode = request.args.get("mode","fts5").strip().lower()  # "fts5" or "regex"
+        exact = request.args.get("exact","false").strip().lower() == "true"
+
         if not q:
             return jsonify(results=[])
-        with get_con() as con:
-            rows = search(con, q, file_f, limit=100)
-        results = []
-        for r in rows:
-            results.append({
-                "id": r["id"],
-                "kb_id": r["kb_id"],
-                "title": r["title"],
-                "source_file": r["source_file"],
-                "is_individual": int(r["is_individual"]) == 1,
-                "snippet_html": r["snippet"],  # contains <mark> tags
-            })
-        return jsonify(results=results)
+
+        try:
+            with get_con() as con:
+                if mode == "regex":
+                    # Use regex search
+                    rows = search_regex(con, q, file_f, limit=100, exact=exact)
+                    # search_regex returns dicts, not Row objects
+                    results = []
+                    for r in rows:
+                        results.append({
+                            "id": r["id"],
+                            "kb_id": r["kb_id"],
+                            "title": r["title"],
+                            "source_file": r["source_file"],
+                            "is_individual": int(r["is_individual"]) == 1,
+                            "snippet_html": r["snippet"],  # contains <mark> tags
+                        })
+                else:
+                    # Use FTS5 search
+                    rows = search(con, q, file_f, limit=100)
+                    results = []
+                    for r in rows:
+                        results.append({
+                            "id": r["id"],
+                            "kb_id": r["kb_id"],
+                            "title": r["title"],
+                            "source_file": r["source_file"],
+                            "is_individual": int(r["is_individual"]) == 1,
+                            "snippet_html": r["snippet"],  # contains <mark> tags
+                        })
+            return jsonify(results=results)
+        except ValueError as e:
+            # Invalid regex pattern
+            return jsonify(error=str(e), results=[]), 400
 
     @app.get("/api/article/kb/<kb_id>")
     def api_article_kb(kb_id):
