@@ -248,13 +248,15 @@ kbd{background:#f1f5f9;border:1px solid var(--border);border-bottom-width:2px;bo
     </div>
     <div class="searchbar">
       <input id="q" type="text" placeholder="Search KB… (quotes for exact phrase)" />
+      <input id="fileFilter" type="text" placeholder="Filter by file name…" />
+      <button id="go">Search</button>
     </div>
     <div class="small">Tips: <kbd>Enter</kbd> to search • <kbd>↑/↓</kbd> navigate • <kbd>Enter</kbd> open</div>
     <div id="results" class="results"></div>
   </div>
   <div class="right">
     <div class="viewer" id="viewer">
-      <div class="small">Type a query and press Enter. Click a result to view the full article here.</div>
+      <div class="small">Type a query and press Search. Click a result to view the full article here.</div>
     </div>
   </div>
 </div>
