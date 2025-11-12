@@ -409,8 +409,6 @@ kbd{background:#f1f5f9;border:1px solid var(--border);border-bottom-width:2px;bo
     </div>
     <div class="searchbar">
       <input id="q" type="text" placeholder="Search KB… (quotes for exact phrase)" />
-      <input id="fileFilter" type="text" placeholder="Filter by file name…" />
-      <button id="go">Search</button>
     </div>
     <div class="small" style="display:flex;gap:12px;align-items:center;margin-top:4px;">
       <label style="display:flex;gap:4px;align-items:center;cursor:pointer;">
@@ -433,14 +431,12 @@ kbd{background:#f1f5f9;border:1px solid var(--border);border-bottom-width:2px;bo
   </div>
   <div class="right">
     <div class="viewer" id="viewer">
-      <div class="small">Type a query and press Search. Click a result to view the full article here.</div>
+      <div class="small">Type a query and press Enter. Click a result to view the full article here.</div>
     </div>
   </div>
 </div>
 <script>
 const qEl = document.getElementById('q');
-const fEl = document.getElementById('fileFilter');
-const goEl = document.getElementById('go');
 const resultsEl = document.getElementById('results');
 const viewer = document.getElementById('viewer');
 const reindexBtn = document.getElementById('reindexBtn');
@@ -529,7 +525,6 @@ function openResult(i){
 
 function doSearch(){
   const q = qEl.value.trim();
-  const ff = fEl.value.trim();
   const mode = regexModeEl.checked ? 'regex' : 'fts5';
   const caseSensitive = caseSensitiveEl.checked ? 'true' : 'false';
   const literal = literalSearchEl.checked ? 'true' : 'false';
@@ -537,7 +532,7 @@ function doSearch(){
   if(!q){ setStatus('Enter a search query.'); return; }
   setStatus('Searching…');
 
-  const url = `/api/search?q=${encodeURIComponent(q)}&file=${encodeURIComponent(ff)}&mode=${mode}&case=${caseSensitive}&literal=${literal}`;
+  const url = `/api/search?q=${encodeURIComponent(q)}&mode=${mode}&case=${caseSensitive}&literal=${literal}`;
 
   fetch(url)
     .then(r=>r.json())
@@ -561,8 +556,6 @@ function escapeHtml(s){
 
 // keyboard
 qEl.addEventListener('keydown', e=>{ if(e.key==='Enter'){ doSearch(); }});
-fEl.addEventListener('keydown', e=>{ if(e.key==='Enter'){ doSearch(); }});
-goEl.addEventListener('click', doSearch);
 
 document.addEventListener('keydown', e=>{
   if(!currentResults.length) return;
