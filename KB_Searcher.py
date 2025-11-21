@@ -580,7 +580,7 @@ def main():
     ap.add_argument("--index", action="store_true", help="(Re)build the index now")
     ap.add_argument("--root", action="append", default=["."], help="Folder(s) to scan; default: current dir")
     ap.add_argument("--serve", action="store_true", help="Start the web UI")
-    ap.add_argument("--host", default="127.0.0.1")
+    ap.add_argument("--host", default="0.0.0.0")
     ap.add_argument("--port", type=int, default=8000)
 
     args = ap.parse_args()
